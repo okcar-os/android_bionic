@@ -194,6 +194,12 @@ int SystemProperties::Read(const prop_info* pi, char* name, char* value) {
   return SERIAL_VALUE_LEN(serial);
 }
 
+const char* specialProperties[] = {
+    "ro.product.model",
+    "ro.product.manufacturer",
+    "ro.product.brand"
+};
+
 void SystemProperties::ReadCallback(const prop_info* pi,
                                     void (*callback)(void* cookie, const char* name,
                                                      const char* value, uint32_t serial),
@@ -204,19 +210,21 @@ void SystemProperties::ReadCallback(const prop_info* pi,
     uint32_t serial = load_const_atomic(&pi->serial, memory_order_relaxed);
     if (pi->is_long()) {
       callback(cookie, pi->name, pi->long_value(), serial);
-    } else {
-      unsigned int productModelNameLen = strlen("ro.product.model");
-      if (strlen(pi->name) >= productModelNameLen && strncmp(pi->name, "ro.product.model", productModelNameLen) == 0) {
-        char tmp[PROP_VALUE_MAX];
-        unsigned okcarLen = strlen("OKCAR ");
-        size_t remainingSpace = PROP_VALUE_MAX - okcarLen;
-
-        strncpy(tmp, "OKCAR ", okcarLen);
-        strncpy(tmp + okcarLen, pi->value, remainingSpace);
-        callback(cookie, pi->name, tmp, serial);
-      } else {
-        callback(cookie, pi->name, pi->value, serial);
-      }      
+    } else {      
+      bool isSpecialProperty = false;
+      for (const auto& specialProperty : specialProperties) {
+          if (strcmp(pi->name, specialProperty) == 0) {
+              char tmp[PROP_VALUE_MAX];
+              snprintf(tmp, PROP_VALUE_MAX, "OKCAR %s", pi->value);
+              callback(cookie, pi->name, tmp, serial);
+              isSpecialProperty = true;
+              break;
+          }
+      }
+            
+      if (!isSpecialProperty) {
+          callback(cookie, pi->name, pi->value, serial);
+      }
     }
     return;
   }
